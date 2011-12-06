@@ -1,0 +1,89 @@
+diff -up sudo-1.7.2p2/audit_help.c.endgrent-auditclose sudo-1.7.2p2/audit_help.c
+--- sudo-1.7.2p2/audit_help.c.endgrent-auditclose	2010-07-15 18:17:22.000000000 +0200
++++ sudo-1.7.2p2/audit_help.c	2010-07-15 18:17:22.000000000 +0200
+@@ -61,6 +61,15 @@ void audit_help_open (void)
+ 	}
+ }
+ 
++void audit_help_close (void)
++{
++        if (audit_fd >= 0) {
++                close (audit_fd);
++                audit_fd = -1;
++        }
++        return;
++}
++
+ /*
+  * This function will log a message to the audit system using a predefined
+  * message format. Parameter usage is as follows:
+diff -up sudo-1.7.2p2/Makefile.in.endgrent-auditclose sudo-1.7.2p2/Makefile.in
+--- sudo-1.7.2p2/Makefile.in.endgrent-auditclose	2010-07-15 18:18:51.000000000 +0200
++++ sudo-1.7.2p2/Makefile.in	2010-07-15 18:19:11.000000000 +0200
+@@ -366,7 +366,7 @@ sia.o: $(authdir)/sia.c $(AUTHDEP)
+ 	$(CC) -c $(CPPFLAGS) $(CFLAGS) $(DEFS) $(OPTIONS) $(authdir)/sia.c
+ 
+ audit_help.o: audit_help.c sudo.h
+-	$(CC) -c $(CPPFLAGS) $(CFLAGS) $(DEFS) $(OPTIONS) $(LIBADUIT) $(srcdir)/audit_help.c
++	$(CC) -c $(CPPFLAGS) $(CFLAGS) $(DEFS) $(OPTIONS) $(LIBAUDIT) $(srcdir)/audit_help.c
+ 
+ sudo.man.in: $(srcdir)/sudo.pod
+ 	@rm -f $(srcdir)/$@
+diff -up sudo-1.7.2p2/selinux.c.endgrent-auditclose sudo-1.7.2p2/selinux.c
+--- sudo-1.7.2p2/selinux.c.endgrent-auditclose	2008-02-22 21:33:00.000000000 +0100
++++ sudo-1.7.2p2/selinux.c	2010-07-15 18:17:22.000000000 +0200
+@@ -326,6 +326,8 @@ selinux_exec(char *role, char *type, cha
+ #ifdef WITH_AUDIT
+     if (send_audit_message(1, old_context, new_context, user_ttypath)) 
+ 	goto error;
++
++    audit_help_close();
+ #endif
+ 
+     /* We use the "spare" slot in argv to store sesh. */
+diff -up sudo-1.7.2p2/sudo.c.endgrent-auditclose sudo-1.7.2p2/sudo.c
+--- sudo-1.7.2p2/sudo.c.endgrent-auditclose	2010-07-15 18:17:22.000000000 +0200
++++ sudo-1.7.2p2/sudo.c	2010-07-15 18:17:22.000000000 +0200
+@@ -542,6 +542,10 @@ main(argc, argv, envp)
+ 	(void) sigaction(SIGQUIT, &saved_sa_quit, NULL);
+ 	(void) sigaction(SIGTSTP, &saved_sa_tstp, NULL);
+ 
++	/* Close the password and group files and free up memory. */
++	sudo_endpwent();
++	sudo_endgrent();
++
+ 	closefrom(def_closefrom + 1);
+ 	
+ #if defined(WITH_AUDIT)
+@@ -557,10 +561,6 @@ main(argc, argv, envp)
+ #ifdef WITH_AUDIT
+         audit_logger(AUDIT_USER_CMD, safe_cmnd, user_args, 1);
+ #endif
+-	
+-	/* Close the password and group files and free up memory. */
+-	sudo_endpwent();
+-	sudo_endgrent();
+ 
+ #ifndef PROFILING
+ 	if (ISSET(sudo_mode, MODE_BACKGROUND) && fork() > 0) {
+@@ -572,6 +572,9 @@ main(argc, argv, envp)
+ 		selinux_exec(user_role, user_type, NewArgv,
+ 		    ISSET(sudo_mode, MODE_LOGIN_SHELL));
+ #endif
++#if WITH_AUDIT
++            audit_help_close();
++#endif
+ 	    execv(safe_cmnd, NewArgv);
+ 	}
+ #else
+diff -up sudo-1.7.2p2/sudo.h.endgrent-auditclose sudo-1.7.2p2/sudo.h
+--- sudo-1.7.2p2/sudo.h.endgrent-auditclose	2010-07-15 18:17:22.000000000 +0200
++++ sudo-1.7.2p2/sudo.h	2010-07-15 18:17:22.000000000 +0200
+@@ -346,6 +346,7 @@ extern int errno;
+ extern int audit_fd;
+ extern void audit_help_open (void);
+ extern void audit_logger (int, const char *, const char *, int);
++extern void audit_help_close (void);
+ #ifdef HAVE_SELINUX
+ # include <selinux/selinux.h>
+ extern int send_audit_message(int, security_context_t, security_context_t, const char *);

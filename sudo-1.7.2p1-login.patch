@@ -1,0 +1,111 @@
+diff -up sudo-1.7.2p1/auth/pam.c.login sudo-1.7.2p1/auth/pam.c
+--- sudo-1.7.2p1/auth/pam.c.login	2009-05-25 14:02:42.000000000 +0200
++++ sudo-1.7.2p1/auth/pam.c	2009-10-30 12:15:48.000000000 +0100
+@@ -100,7 +100,13 @@ pam_init(pw, promptp, auth)
+     if (auth != NULL)
+ 	auth->data = (void *) &pam_status;
+     pam_conv.conv = sudo_conv;
+-    pam_status = pam_start("sudo", pw->pw_name, &pam_conv, &pamh);
++#ifdef HAVE_PAM_LOGIN
++    if (ISSET(sudo_mode, MODE_LOGIN_SHELL))
++	    pam_status = pam_start("sudo-i", pw->pw_name, &pam_conv, &pamh);
++    else
++#endif
++	    pam_status = pam_start("sudo", pw->pw_name, &pam_conv, &pamh);
++
+     if (pam_status != PAM_SUCCESS) {
+ 	log_error(USE_ERRNO|NO_EXIT|NO_MAIL, "unable to initialize PAM");
+ 	return(AUTH_FATAL);
+diff -up sudo-1.7.2p1/configure.in.login sudo-1.7.2p1/configure.in
+--- sudo-1.7.2p1/configure.in.login	2009-07-20 15:34:37.000000000 +0200
++++ sudo-1.7.2p1/configure.in	2009-10-30 12:16:24.000000000 +0100
+@@ -394,6 +394,17 @@ AC_ARG_WITH(pam, [AS_HELP_STRING([--with
+ 		;;
+ esac])
+ 
++AC_ARG_WITH(pam-login, [  --with-pam-login              enable specific PAM session for sudo -i],
++[case $with_pam_login in
++    yes)      AC_DEFINE([HAVE_PAM_LOGIN], [], ["Define to 1 if you use specific PAM session for sodo -i."])
++              AC_MSG_CHECKING(whether to use PAM login)
++              AC_MSG_RESULT(yes)
++              ;;
++    no)               ;;
++    *)                AC_MSG_ERROR(["--with-pam-login does not take an argument."])
++              ;;
++esac])
++
+ AC_ARG_WITH(AFS, [AS_HELP_STRING([--with-AFS], [enable AFS support])],
+ [case $with_AFS in
+     yes)	AC_DEFINE(HAVE_AFS)
+diff -up sudo-1.7.2p1/env.c.login sudo-1.7.2p1/env.c
+--- sudo-1.7.2p1/env.c.login	2009-06-23 20:24:42.000000000 +0200
++++ sudo-1.7.2p1/env.c	2009-10-30 12:15:48.000000000 +0100
+@@ -102,7 +102,7 @@ struct environment {
+ /*
+  * Prototypes
+  */
+-void rebuild_env		__P((int, int));
++void rebuild_env		__P((int));
+ static void sudo_setenv		__P((const char *, const char *, int));
+ static void sudo_putenv		__P((char *, int, int));
+ 
+@@ -562,8 +562,7 @@ matches_env_keep(var)
+  * Also adds sudo-specific variables (SUDO_*).
+  */
+ void
+-rebuild_env(sudo_mode, noexec)
+-    int sudo_mode;
++rebuild_env(noexec)
+     int noexec;
+ {
+     char **old_envp, **ep, *cp, *ps1;
+diff -up sudo-1.7.2p1/sudo.c.login sudo-1.7.2p1/sudo.c
+--- sudo-1.7.2p1/sudo.c.login	2009-05-27 02:49:07.000000000 +0200
++++ sudo-1.7.2p1/sudo.c	2009-10-30 12:15:48.000000000 +0100
+@@ -126,7 +126,7 @@ static void usage_excl			__P((int))
+ 					    __attribute__((__noreturn__));
+ static struct passwd *get_authpw	__P((void));
+ extern int sudo_edit			__P((int, char **, char **));
+-extern void rebuild_env			__P((int, int));
++extern void rebuild_env			__P((int));
+ void validate_env_vars			__P((struct list_member *));
+ void insert_env_vars			__P((struct list_member *));
+ 
+@@ -157,6 +157,8 @@ login_cap_t *lc;
+ char *login_style;
+ #endif /* HAVE_BSD_AUTH_H */
+ sigaction_t saved_sa_int, saved_sa_quit, saved_sa_tstp;
++
++int sudo_mode;
+ static char *runas_user;
+ static char *runas_group;
+ static struct sudo_nss_list *snl;
+@@ -172,7 +174,7 @@ main(argc, argv, envp)
+     char **envp;
+ {
+     int sources = 0, validated;
+-    int fd, cmnd_status, sudo_mode, pwflag, rc = 0;
++    int fd, cmnd_status, pwflag, rc = 0;
+     sigaction_t sa;
+     struct sudo_nss *nss;
+ #if defined(SUDO_DEVEL) && defined(__OpenBSD__)
+@@ -421,7 +423,7 @@ main(argc, argv, envp)
+ 	def_env_reset = FALSE;
+ 
+     /* Build a new environment that avoids any nasty bits. */
+-    rebuild_env(sudo_mode, def_noexec);
++    rebuild_env(def_noexec);
+ 
+     /* Fill in passwd struct based on user we are authenticating as.  */
+     auth_pw = get_authpw();
+diff -up sudo-1.7.2p1/sudo.h.login sudo-1.7.2p1/sudo.h
+--- sudo-1.7.2p1/sudo.h.login	2009-05-25 14:02:41.000000000 +0200
++++ sudo-1.7.2p1/sudo.h	2009-10-30 12:15:48.000000000 +0100
+@@ -334,6 +334,7 @@ extern struct passwd *auth_pw, *list_pw;
+ extern int tgetpass_flags;
+ extern int long_list;
+ extern uid_t timestamp_uid;
++extern int sudo_mode;
+ #endif
+ #ifndef errno
+ extern int errno;

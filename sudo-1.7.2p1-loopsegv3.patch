@@ -1,0 +1,33 @@
+diff -up sudo-1.7.2p1/toke.c.loop sudo-1.7.2p1/toke.c
+--- sudo-1.7.2p1/toke.c.loop	2010-02-09 12:48:33.000000000 +0100
++++ sudo-1.7.2p1/toke.c	2010-02-09 16:54:17.000000000 +0100
+@@ -3461,7 +3461,7 @@ init_lexer()
+ 	    efree(pl);
+ 	}
+ 	efree(istack[idepth].path);
+-	if (!istack[idepth].keepopen)
++	if (idepth && !istack[idepth].keepopen)
+ 	    fclose(istack[idepth].bs->yy_input_file);
+ 	yy_delete_buffer(istack[idepth].bs);
+     }
+@@ -3486,7 +3486,7 @@ _push_include(path, isdir)
+ 	}
+ 	istacksize += SUDOERS_STACK_INCREMENT;
+ 	istack = (struct include_stack *) realloc(istack,
+-	    sizeof(istack) * istacksize);
++	    sizeof(*istack) * istacksize);
+ 	if (istack == NULL) {
+ 	    yyerror("unable to allocate memory");
+ 	    return(FALSE);
+diff -up sudo-1.7.2p1/toke.l.loop sudo-1.7.2p1/toke.l
+--- sudo-1.7.2p1/toke.l.loop	2010-02-09 12:48:30.000000000 +0100
++++ sudo-1.7.2p1/toke.l	2010-02-09 13:18:27.000000000 +0100
+@@ -869,7 +869,7 @@ _push_include(path, isdir)
+ 	}
+ 	istacksize += SUDOERS_STACK_INCREMENT;
+ 	istack = (struct include_stack *) realloc(istack,
+-	    sizeof(istack) * istacksize);
++	    sizeof(*istack) * istacksize);
+ 	if (istack == NULL) {
+ 	    yyerror("unable to allocate memory");
+ 	    return(FALSE);
